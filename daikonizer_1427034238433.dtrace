@@ -1,0 +1,48 @@
+decl-version 2.0
+var-comparability implicit
+
+ppt SynopticPoint:::ENTER
+ppt-type enter
+ variable x
+  var-kind variable
+  dec-type int
+  rep-type int
+
+
+ppt SynopticPoint:::EXIT1
+ppt-type subexit
+ variable x
+  var-kind variable
+  dec-type int
+  rep-type int
+
+SynopticPoint:::ENTER
+x
+-1
+1
+
+SynopticPoint:::EXIT1
+x
+-1
+1
+
+SynopticPoint:::ENTER
+x
+0
+1
+
+SynopticPoint:::EXIT1
+x
+0
+1
+
+SynopticPoint:::ENTER
+x
+1
+1
+
+SynopticPoint:::EXIT1
+x
+1
+1
+
