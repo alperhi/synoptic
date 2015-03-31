@@ -31,228 +31,241 @@ import synoptic.model.event.StringEventType;
  * connected time chains.
  */
 public class ChainsTraceGraph extends TraceGraph<StringEventType> {
-    static Event initEvent = Event.newInitialStringEvent();
-    static Event termEvent = Event.newTerminalStringEvent();
+	static Event initEvent = Event.newInitialStringEvent();
+	static Event termEvent = Event.newTerminalStringEvent();
 
-    /**
-     * Maintains a map of trace id to the set of initial nodes in the trace.
-     */
-    private final Map<Integer, EventNode> traceIdToInitNodes = new LinkedHashMap<Integer, EventNode>();
+	/**
+	 * Maintains a map of trace id to the set of initial nodes in the trace.
+	 */
+	private final Map<Integer, EventNode> traceIdToInitNodes = new LinkedHashMap<Integer, EventNode>();
 
-    private final List<Trace> traces = new ArrayList<Trace>();
+	private final List<Trace> traces = new ArrayList<Trace>();
 
-    public ChainsTraceGraph(Collection<EventNode> nodes) {
-        super(nodes, initEvent, termEvent);
-    }
+	// Partitioning based on filter expressions -- maps a unique partition
+	// string to a set of parsed events corresponding to that partition.
+	Map<String, ArrayList<EventNode>> partitions = new LinkedHashMap<String, ArrayList<EventNode>>();
 
-    public ChainsTraceGraph() {
-        super(initEvent, termEvent);
-    }
+	public ChainsTraceGraph(Collection<EventNode> nodes) {
+		super(nodes, initEvent, termEvent);
+	}
 
-    @Override
-    public void tagTerminal(EventNode terminalNode, Set<String> relations) {
-        super.add(terminalNode);
-        super.tagTerminal(terminalNode, relations);
-    }
+	public ChainsTraceGraph() {
+		super(initEvent, termEvent);
+	}
 
-    @Override
-    public void tagTerminal(EventNode terminalNode, String relation) {
-        super.add(terminalNode);
-        super.tagTerminal(terminalNode, relation);
-    }
+	@Override
+	public void tagTerminal(EventNode terminalNode, Set<String> relations) {
+		super.add(terminalNode);
+		super.tagTerminal(terminalNode, relations);
+	}
 
-    public void tagInitial(EventNode initialNode, String relation) {
-        Set<String> relations = new LinkedHashSet<String>();
-        relations.add(relation);
-        super.add(initialNode);
-        this.tagInitial(initialNode, relations);
-    }
+	@Override
+	public void tagTerminal(EventNode terminalNode, String relation) {
+		super.add(terminalNode);
+		super.tagTerminal(terminalNode, relation);
+	}
 
-    @Override
-    public void tagInitial(EventNode initialNode, Set<String> relations) {
-        if (relations == null) {
-            throw new NullPointerException("Null relation set");
-        }
-        super.add(initialNode);
-        super.tagInitial(initialNode, relations);
-        traceIdToInitNodes.put(initialNode.getTraceID(), initialNode);
-    }
+	public void tagInitial(EventNode initialNode, String relation) {
+		Set<String> relations = new LinkedHashSet<String>();
+		relations.add(relation);
+		super.add(initialNode);
+		this.tagInitial(initialNode, relations);
+	}
 
-    /**
-     * Adds the event nodes to the graph and creates appropriate transitions for
-     * regular and closure relations. Also generates Trace and RelationPath data
-     * structures.
-     * 
-     * @param events
-     *            List of EventNodes in trace order
-     * @param eventRelations
-     * @throws ParseException
-     *             if two events have identical timestamp.
-     */
-    public void addTrace(List<EventNode> events,
-            Map<EventNode, Set<Relation>> eventRelations) throws ParseException {
-        assert events.size() > 0;
+	@Override
+	public void tagInitial(EventNode initialNode, Set<String> relations) {
+		if (relations == null) {
+			throw new NullPointerException("Null relation set");
+		}
+		super.add(initialNode);
+		super.tagInitial(initialNode, relations);
+		traceIdToInitNodes.put(initialNode.getTraceID(), initialNode);
+	}
 
-        if (!AbstractOptions.keepOrder) {
-            // Sort the events in this group/trace according to the totally
-            // order time relation.
-            Collections.sort(events, new Comparator<EventNode>() {
-                @Override
-                public int compare(EventNode e1, EventNode e2) {
-                    return e1.getTime().compareTo(e2.getTime());
-                }
-            });
-        }
+	public void setPartitions(
+			final Map<String, ArrayList<EventNode>> partitionMap) {
+		this.partitions = partitionMap;
+	}
 
-        Map<String, EventNode> lastSeenNodeForRelation = new HashMap<String, EventNode>();
-        EventNode prevNode = null;
+	public Map<String, ArrayList<EventNode>> getPartitions() {
+		return this.partitions;
+	}
 
-        Trace trace = new Trace();
-        traces.add(trace);
+	/**
+	 * Adds the event nodes to the graph and creates appropriate transitions for
+	 * regular and closure relations. Also generates Trace and RelationPath data
+	 * structures.
+	 * 
+	 * @param events
+	 *            List of EventNodes in trace order
+	 * @param eventRelations
+	 * @throws ParseException
+	 *             if two events have identical timestamp.
+	 */
+	public void addTrace(List<EventNode> events,
+			Map<EventNode, Set<Relation>> eventRelations) throws ParseException {
+		assert events.size() > 0;
 
-        // Create transitions to connect the nodes in the sorted trace.
-        for (EventNode curNode : events) {
-            // Process node's relations:
-            Map<EventNode, Set<String>> srcNodeToTxRelations = new LinkedHashMap<EventNode, Set<String>>();
-            for (Relation relation : eventRelations.get(curNode)) {
+		if (!AbstractOptions.keepOrder) {
+			// Sort the events in this group/trace according to the totally
+			// order time relation.
+			Collections.sort(events, new Comparator<EventNode>() {
+				@Override
+				public int compare(EventNode e1, EventNode e2) {
+					return e1.getTime().compareTo(e2.getTime());
+				}
+			});
+		}
 
-                EventNode txNode;
-                if (relation.isClosure()) {
-                    // Closure relations create transitions between the current
-                    // node and the last seen node for the relation.
-                    txNode = lastSeenNodeForRelation
-                            .get(relation.getRelation());
-                } else {
-                    // Otherwise, the transition is from the previous node in
-                    // the chain.
-                    txNode = prevNode;
-                }
+		Map<String, EventNode> lastSeenNodeForRelation = new HashMap<String, EventNode>();
+		EventNode prevNode = null;
 
-                // Add the relation to set of relations associated with the
-                // transition from txNode (if one exists). If one doesn't exist,
-                // then create a new set of relations.
-                Set<String> txRelations;
-                if (!srcNodeToTxRelations.containsKey(txNode)) {
-                    txRelations = new LinkedHashSet<String>();
-                    srcNodeToTxRelations.put(txNode, txRelations);
-                } else {
-                    txRelations = srcNodeToTxRelations.get(txNode);
-                }
-                txRelations.add(relation.getRelation());
-            }
+		Trace trace = new Trace();
+		traces.add(trace);
 
-            // Create a transition for each node that should be connected to
-            // curNode.
-            for (EventNode srcNode : srcNodeToTxRelations.keySet()) {
-                Set<String> relations = srcNodeToTxRelations.get(srcNode);
+		// Create transitions to connect the nodes in the sorted trace.
+		for (EventNode curNode : events) {
+			// Process node's relations:
+			Map<EventNode, Set<String>> srcNodeToTxRelations = new LinkedHashMap<EventNode, Set<String>>();
+			for (Relation relation : eventRelations.get(curNode)) {
 
-                if (srcNode == null) {
-                    // In this case, the srcNode is considered to be INITIAL, so
-                    // we tag curNode as initial and add a new relation path to
-                    // the trace.
-                    relations = new HashSet<String>();
-                    Set<Relation> wrappedRelations = eventRelations
-                            .get(curNode);
-                    for (Relation relation : wrappedRelations) {
-                        String relationString = relation.getRelation();
-                        if (!trace.containsRelation(relationString)) {
-                            trace.addInitialNode(relationString, curNode);
-                        }
-                        relations.add(relationString);
-                    }
-                    tagInitial(curNode, relations);
-                } else {
-                    // Otherwise, there is a specific previous srcNode, and we
-                    // connect curNode to this node.
-                    srcNode.addTransition(curNode, relations);
-                }
+				EventNode txNode;
+				if (relation.isClosure()) {
+					// Closure relations create transitions between the current
+					// node and the last seen node for the relation.
+					txNode = lastSeenNodeForRelation
+							.get(relation.getRelation());
+				} else {
+					// Otherwise, the transition is from the previous node in
+					// the chain.
+					txNode = prevNode;
+				}
 
-                // Update the lastSeednNodeForRelation map.
-                for (String r : relations) {
-                    lastSeenNodeForRelation.put(r, curNode);
-                }
-            }
-            prevNode = curNode;
-        }
+				// Add the relation to set of relations associated with the
+				// transition from txNode (if one exists). If one doesn't exist,
+				// then create a new set of relations.
+				Set<String> txRelations;
+				if (!srcNodeToTxRelations.containsKey(txNode)) {
+					txRelations = new LinkedHashSet<String>();
+					srcNodeToTxRelations.put(txNode, txRelations);
+				} else {
+					txRelations = srcNodeToTxRelations.get(txNode);
+				}
+				txRelations.add(relation.getRelation());
+			}
 
-        // Tag the final node as terminal:
-        Set<String> s = new LinkedHashSet<String>();
-        for (Relation r : eventRelations.get(prevNode)) {
-            s.add(r.getRelation());
-        }
-        tagTerminal(prevNode, s);
-    }
+			// Create a transition for each node that should be connected to
+			// curNode.
+			for (EventNode srcNode : srcNodeToTxRelations.keySet()) {
+				Set<String> relations = srcNodeToTxRelations.get(srcNode);
 
-    /**
-     * Returns the number of trace ids that are immediately reachable from the
-     * initNode.
-     */
-    @Override
-    public int getNumTraces() {
-        return traceIdToInitNodes.size();
-    }
+				if (srcNode == null) {
+					// In this case, the srcNode is considered to be INITIAL, so
+					// we tag curNode as initial and add a new relation path to
+					// the trace.
+					relations = new HashSet<String>();
+					Set<Relation> wrappedRelations = eventRelations
+							.get(curNode);
+					for (Relation relation : wrappedRelations) {
+						String relationString = relation.getRelation();
+						if (!trace.containsRelation(relationString)) {
+							trace.addInitialNode(relationString, curNode);
+						}
+						relations.add(relationString);
+					}
+					tagInitial(curNode, relations);
+				} else {
+					// Otherwise, there is a specific previous srcNode, and we
+					// connect curNode to this node.
+					srcNode.addTransition(curNode, relations);
+				}
 
-    /**
-     * Transitive closure construction for a ChainsTraceGraph is simple: iterate
-     * through each chain independently and add all successors of a node in a
-     * chain to it's transitive closure set. <br/>
-     * <br/>
-     * NOTE: an assumption of this code is that although there might be multiple
-     * relations, the graph remains a linear chain.
-     */
-    @Override
-    public TransitiveClosure getTransitiveClosure(Set<String> relations) {
-        assert relations != null;
+				// Update the lastSeednNodeForRelation map.
+				for (String r : relations) {
+					lastSeenNodeForRelation.put(r, curNode);
+				}
+			}
+			prevNode = curNode;
+		}
 
-        TransitiveClosure transClosure = new TransitiveClosure(relations);
-        List<EventNode> prevNodes = new LinkedList<EventNode>();
-        for (EventNode firstNode : traceIdToInitNodes.values()) {
-            EventNode curNode = firstNode;
+		// Tag the final node as terminal:
+		Set<String> s = new LinkedHashSet<String>();
+		for (Relation r : eventRelations.get(prevNode)) {
+			s.add(r.getRelation());
+		}
+		tagTerminal(prevNode, s);
+	}
 
-            while (!curNode.isTerminal()) {
-                prevNodes.clear();
+	/**
+	 * Returns the number of trace ids that are immediately reachable from the
+	 * initNode.
+	 */
+	@Override
+	public int getNumTraces() {
+		return traceIdToInitNodes.size();
+	}
 
-                while (curNode.getTransitionsWithExactRelations(relations)
-                        .size() == 1) {
-                    for (EventNode prevNode : prevNodes) {
-                        transClosure.recordTransitiveReachability(prevNode,
-                                curNode);
-                    }
-                    prevNodes.add(curNode);
-                    curNode = curNode
-                            .getTransitionsWithExactRelations(relations).get(0)
-                            .getTarget();
-                }
+	/**
+	 * Transitive closure construction for a ChainsTraceGraph is simple: iterate
+	 * through each chain independently and add all successors of a node in a
+	 * chain to it's transitive closure set. <br/>
+	 * <br/>
+	 * NOTE: an assumption of this code is that although there might be multiple
+	 * relations, the graph remains a linear chain.
+	 */
+	@Override
+	public TransitiveClosure getTransitiveClosure(Set<String> relations) {
+		assert relations != null;
 
-                if (!curNode.isTerminal()) {
-                    for (EventNode prevNode : prevNodes) {
-                        transClosure.recordTransitiveReachability(prevNode,
-                                curNode);
-                    }
+		TransitiveClosure transClosure = new TransitiveClosure(relations);
+		List<EventNode> prevNodes = new LinkedList<EventNode>();
+		for (EventNode firstNode : traceIdToInitNodes.values()) {
+			EventNode curNode = firstNode;
 
-                    assert curNode.getAllSuccessors().size() == 1;
-                    curNode = curNode.getAllSuccessors().iterator().next();
-                }
-            }
-        }
-        return transClosure;
-    }
+			while (!curNode.isTerminal()) {
+				prevNodes.clear();
 
-    // Used by tests only (so that DAGWalking invariant miner can operate on
-    // ChainsTraceGraph)
-    @Override
-    public Map<Integer, Set<EventNode>> getTraceIdToInitNodes() {
-        Map<Integer, Set<EventNode>> map = new LinkedHashMap<Integer, Set<EventNode>>();
-        for (Integer k : traceIdToInitNodes.keySet()) {
-            Set<EventNode> set = new LinkedHashSet<EventNode>();
-            set.add(traceIdToInitNodes.get(k));
-            map.put(k, set);
-        }
-        return map;
-    }
+				while (curNode.getTransitionsWithExactRelations(relations)
+						.size() == 1) {
+					for (EventNode prevNode : prevNodes) {
+						transClosure.recordTransitiveReachability(prevNode,
+								curNode);
+					}
+					prevNodes.add(curNode);
+					curNode = curNode
+							.getTransitionsWithExactRelations(relations).get(0)
+							.getTarget();
+				}
 
-    public List<Trace> getTraces() {
-        return Collections.unmodifiableList(traces);
-    }
+				if (!curNode.isTerminal()) {
+					for (EventNode prevNode : prevNodes) {
+						transClosure.recordTransitiveReachability(prevNode,
+								curNode);
+					}
+
+					assert curNode.getAllSuccessors().size() == 1;
+					curNode = curNode.getAllSuccessors().iterator().next();
+				}
+			}
+		}
+		return transClosure;
+	}
+
+	// Used by tests only (so that DAGWalking invariant miner can operate on
+	// ChainsTraceGraph)
+	@Override
+	public Map<Integer, Set<EventNode>> getTraceIdToInitNodes() {
+		Map<Integer, Set<EventNode>> map = new LinkedHashMap<Integer, Set<EventNode>>();
+		for (Integer k : traceIdToInitNodes.keySet()) {
+			Set<EventNode> set = new LinkedHashSet<EventNode>();
+			set.add(traceIdToInitNodes.get(k));
+			map.put(k, set);
+		}
+		return map;
+	}
+
+	public List<Trace> getTraces() {
+		return Collections.unmodifiableList(traces);
+	}
 
 }
