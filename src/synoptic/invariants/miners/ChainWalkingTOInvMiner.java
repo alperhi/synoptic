@@ -259,10 +259,11 @@ public class ChainWalkingTOInvMiner extends CountingInvariantMiner implements
 				int cntPrecedesFirstSecond = gPrecedesCnts.get(first).get(
 						second);
 				int cntFirst = gEventCnts.get(first);
+				int cntFirstTraceMax = 0;
+				int diffMinimum = 9999;
 
 				// otherwise cntAlwaysEqualsGreater can not be true
 				if (cntPrecedesFirstSecond <= cntFirst) {
-
 					for (String partition : partitions.keySet()) {
 						ArrayList<EventNode> eventNodeList = partitions
 								.get(partition);
@@ -278,20 +279,28 @@ public class ChainWalkingTOInvMiner extends CountingInvariantMiner implements
 								if (cntFirstTrace < 0) {
 									cntAlwaysEqualsGreater = false;
 								}
+								if (cntFirstTrace < diffMinimum) {
+									diffMinimum = cntFirstTrace;
+								}
+							}
+							if (cntFirstTrace > cntFirstTraceMax) {
+								cntFirstTraceMax = cntFirstTrace;
 							}
 						}
-
 						if (!cntAlwaysEqualsGreater) {
 							break;
 						}
 					}
 
-					if (cntAlwaysEqualsGreater) {
+					// when cntFirstTraceMax > 1 than no
+					// CntAlwaysEqualsGreaterInvariant invariant is needed. Then
+					// the releationship can be represented as boolean type.
+					if (cntAlwaysEqualsGreater && cntFirstTraceMax > 1) {
 						CntAlwaysEqualsGreaterInvariant cntAlwaysEqualsLessInvariant = new CntAlwaysEqualsGreaterInvariant(
-								first, second, Event.defTimeRelationStr);
+								first, second, Event.defTimeRelationStr,
+								diffMinimum);
 						invariants.add(cntAlwaysEqualsLessInvariant);
 					}
-
 				}
 
 			}
@@ -356,7 +365,6 @@ public class ChainWalkingTOInvMiner extends CountingInvariantMiner implements
 	@Override
 	public Set<Class<? extends ITemporalInvariant>> getIgnoredInvariants() {
 		Set<Class<? extends ITemporalInvariant>> set = new HashSet<Class<? extends ITemporalInvariant>>();
-
 		return set;
 	}
 

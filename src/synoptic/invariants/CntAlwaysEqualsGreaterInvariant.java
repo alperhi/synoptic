@@ -7,9 +7,12 @@ import synoptic.model.interfaces.INode;
 
 public class CntAlwaysEqualsGreaterInvariant extends BinaryInvariant {
 
+	int diffMinimum = 0;
+
 	public CntAlwaysEqualsGreaterInvariant(EventType typeFirst,
-			EventType typeSecond, String relation) {
+			EventType typeSecond, String relation, final int diffMinimum) {
 		super(typeFirst, typeSecond, relation);
+		this.diffMinimum = diffMinimum;
 	}
 
 	@Override
@@ -47,6 +50,21 @@ public class CntAlwaysEqualsGreaterInvariant extends BinaryInvariant {
 	public String toString() {
 		return first.toString() + " CntAlwaysEqualsGreater("
 				+ relation.toString() + ") " + second.toString();
+	}
+
+	/**
+	 * @return the diffMinimum
+	 */
+	public final int getDiffMinimum() {
+		return diffMinimum;
+	}
+
+	/**
+	 * @param diffMinimum
+	 *            the diffMinimum to set
+	 */
+	public final void setDiffMinimum(int diffMinimum) {
+		this.diffMinimum = diffMinimum;
 	}
 
 }
