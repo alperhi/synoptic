@@ -1,0 +1,14 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Synoptic
+Bundle-SymbolicName: Synoptic
+Bundle-Version: 1.0.0.qualifier
+Bundle-ClassPath: Synoptic.jar,
+ lib/daikon.jar,
+ lib/json-simple-1.1.1.jar,
+ lib/junit-4.9b2.jar,
+ lib/plume.jar,
+ lib/Daikonizer.jar
+Export-Package: synoptic.invariants,
+ synoptic.main
+Bundle-RequiredExecutionEnvironment: JavaSE-1.7
